@@ -5,11 +5,12 @@ submitWord = function(){
   if(candidate && window.isWordBurstFamilySafe && !window.isWordBurstFamilySafe(candidate)){
     react('Family filter says nope 🙈', false);
     clearSelection();
-    return;
+    return false;
   }
   return wordBurstBaseSubmit();
 };
 
-// The original click handler captured the original function, so point it at the
-// wrapped version. Keyboard submission resolves the updated binding automatically.
-$('submitButton').onclick = submitWord;
+// Older builds had a submit button. Keep this guard so the safety wrapper works
+// whether that control exists or the game auto-submits on release.
+const legacySubmitButton = $('submitButton');
+if(legacySubmitButton) legacySubmitButton.onclick = submitWord;
