@@ -1,4 +1,4 @@
-// WordBurst interaction polish: release-to-submit and lightweight Web Audio effects.
+// WordBurst interaction polish: release-to-submit, forgiving mobile swipes, and lightweight Web Audio effects.
 let wbAudioCtx = null;
 let wbLastCountdownSecond = null;
 
@@ -55,6 +55,39 @@ function wbTimeUpSound(){
 
 // Replace the tiny default tile click with a slightly musical rising tick.
 softClick = wbTileSound;
+
+// Mobile swipe helper. When a finger passes through the gutter between tiles,
+// choose the nearest ADJACENT tile instead of requiring an exact DOM hit.
+function wbSelectNearestTile(clientX, clientY){
+  if(!dragging || !selected.length || !screens.game.classList.contains('active')) return;
+  const last=selected[selected.length-1];
+  let bestIndex=-1, bestDistance=Infinity, tileSize=0;
+  [...boardEl.children].forEach((tile,i)=>{
+    if(i===last || selected.includes(i) || !isAdjacent(last,i)) return;
+    const r=tile.getBoundingClientRect();
+    tileSize=Math.max(tileSize,Math.min(r.width,r.height));
+    const cx=r.left+r.width/2, cy=r.top+r.height/2;
+    const d=Math.hypot(clientX-cx,clientY-cy);
+    if(d<bestDistance){bestDistance=d;bestIndex=i;}
+  });
+  // Slightly larger than half a tile + gutter. This is intentionally forgiving
+  // for thumbs and diagonal travel, but only adjacent tiles are eligible.
+  const radius=Math.max(34,tileSize*.78);
+  if(bestIndex>=0 && bestDistance<=radius) selectTile(bestIndex);
+}
+
+boardEl.addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  wbSelectNearestTile(e.clientX,e.clientY);
+},{passive:true});
+
+// Touch browsers sometimes deliver sparse pointermove events. Sampling the latest
+// touch position gives diagonal swipes another chance to land on the intended tile.
+boardEl.addEventListener('touchmove',e=>{
+  if(!dragging || !e.touches?.length) return;
+  const t=e.touches[0];
+  wbSelectNearestTile(t.clientX,t.clientY);
+},{passive:true});
 
 // Wrap submission to add sounds based on the result while preserving the family filter.
 const wbSubmit = submitWord;
