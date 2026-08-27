@@ -1,4 +1,4 @@
-// Keep WordBurst playful without sounding sarcastic or passive-aggressive.
+// Keep WordBurst playful without sounding sarcastic at the player.
 (() => {
   const baseReact=react;
   react=function(text,good){
@@ -13,12 +13,5 @@
     else if(/Word goblin/i.test(t)) friendly='Great find! 💥';
     return baseReact(friendly,good);
   };
-
-  const resultTitle=$('resultTitle');
-  if(resultTitle){
-    const observer=new MutationObserver(()=>{
-      if(resultTitle.textContent==='We Pretend This Never Happened') resultTitle.textContent='Good warm-up!';
-    });
-    observer.observe(resultTitle,{childList:true,subtree:true,characterData:true});
-  }
+  // Intentionally keep the low-score result joke: “We Pretend This Never Happened”.
 })();
