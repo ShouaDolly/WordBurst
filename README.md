@@ -1,35 +1,48 @@
 # WordBurst 💥
 
-A fast solo word-finding game built for family play, with party mode planned next.
+A mobile-first word-finding game built for family play. Open it in a phone browser—no app installation is required.
 
-## MVP 1
+## Current game
 
-- 4×4 randomized letter board
-- Swipe/drag across letters or tap letters individually
-- Horizontal, vertical, and diagonal connections
+- 4×4 Classic and 5×5 Big Burst boards
+- Press, swipe through touching letters, and release to submit automatically
+- Horizontal, vertical, diagonal, zig-zag, and criss-cross paths
 - A tile cannot be reused within the same word
 - Minimum 3-letter words
 - 3-minute rounds
-- Classic word-game scoring:
-  - 3–4 letters = 1 point
-  - 5 letters = 2 points
-  - 6 letters = 3 points
-  - 7 letters = 5 points
-  - 8+ letters = 11 points
-- Duplicate words cannot score twice in one round
-- Funny emoji reactions
-- Device-local player profile
+- Word-length scoring:
+  - 3 letters = 1 point
+  - 4 letters = 2 points
+  - 5 letters = 3 points
+  - 6 letters = 4 points
+  - Every additional letter adds 1 point
+- Duplicate words cannot score twice in one attempt
+- Family-safe vocabulary filtering
+- Optional quiet sound effects
+- Device-local player profile and emoji avatar
 - Best score, games played, word totals, streak, and longest-word tracking
-- Mobile-first responsive design
-- No backend required for MVP 1
+
+## Puzzle challenges
+
+Every generated board has a stable puzzle ID. After a round, WordBurst:
+
+- Solves the same board using the active WordBurst dictionary
+- Reveals the longest possible word
+- Shows the number of possible words and maximum possible score
+- Saves attempt scores for that exact puzzle
+- Allows up to three total attempts per player/device
+- Keeps the highest score from those three attempts
+- Creates a shareable challenge link containing the exact board and the sender's score to beat
+
+A friend opening the link receives the same board and their own three attempts. This works without a backend. A centralized live leaderboard still requires the planned account/party backend.
 
 ## Dictionary
 
-WordBurst attempts to load the open `dwyl/english-words` word list at runtime and caches it in the browser. A small built-in fallback dictionary lets the game remain playable if the larger dictionary cannot load.
+A reviewed common-word dictionary is bundled directly into the game, so play never waits on a dictionary-loading screen. When available, WordBurst quietly adds the `google-10000-english-usa-no-swears` list and applies the family-safe filter before accepting words.
 
 ## Run locally
 
-Because this version is static, you can use any simple local web server. For example:
+Because this version is static, use any simple local web server. For example:
 
 ```bash
 python3 -m http.server 8080
@@ -41,21 +54,15 @@ Then open `http://localhost:8080`.
 
 The repo can be hosted directly as a static website using Cloudflare Pages, GitHub Pages, AWS Amplify Hosting, S3/CloudFront, or another static host. There is no build step.
 
-## Planned Party Mode
-
-The code is intentionally structured so local profile storage can later be replaced with real accounts and shared storage.
-
-Planned additions:
+## Planned live party mode
 
 - Email sign-in with a separate public display name
 - Persistent profiles across devices
 - Create Party / Join Party by room code or link
 - Same board and synchronized timer for every player
-- Live family scoreboard
-- End-of-round podium
-- Party wins and lifetime stats
+- Live family scoreboard and end-of-round podium
+- Party wins and lifetime statistics
 - Daily Burst: one shared board for everyone each day
-- Family leaderboard
 
 ## Branding
 
