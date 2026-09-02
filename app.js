@@ -1,2 +1,689 @@
-const $=id=>document.getElementById(id);const screens={home:$('homeScreen'),game:$('gameScreen'),results:$('resultsScreen')};const boardEl=$('board'),pathLayer=$('pathLayer'),currentWordEl=$('currentWord'),scoreEl=$('score'),timerEl=$('timer'),timerCard=$('timerCard'),wordCountEl=$('wordCount'),foundWordsEl=$('foundWords'),lastPointsEl=$('lastPoints'),reactionEl=$('reaction'),profileDialog=$('profileDialog'),howDialog=$('howDialog'),nameInput=$('nameInput'),emojiPicker=$('emojiPicker');const emojis=['😎','🤓','😂','🤯','😈','👽','🦄','🐸','🧠','💩','👑','🦖','🐔','🥸','🤠','🫠'];const DURATION=180;const dice4=['AAEEGN','ABBJOO','ACHOPS','AFFKPS','AOOTTW','CIMOTU','DEILRX','DELRVY','DISTTY','EEGHNW','EEINSU','EHRTVW','EIOSST','ELRTTY','HIMNQU','HLNNRZ'];const dice5=['AAAFRS','AAEEEE','AAFIRS','ADENNN','AEEEEM','AEEGMU','AEGMNN','AFIRSY','BJKQXZ','CCENST','CEIILT','CEILPT','CEIPST','DDHNOT','DHHLOR','DHHNOW','DHLNOR','EIIITT','EMOTTT','ENSSSU','FIPRSY','GORRVW','HIPRRY','NOOTUW','OOOTTU'];const fallback=new Set('ace act add age ago aid aim air ale all and ant any ape apt arc are ark arm art ash ask ate bad bag bar bat bay bed bee bet big bin bit boa bog bow box boy bug bun bus buy cab can cap car cat cod cog cop cot cow cry cup cut day den dew die dig dog dot dry ear eat eel egg end eye fan far fat fed fee few fig fin fit fix fly fog fox fun gap gas gel gem get gin gum gun gut ham hat hen her hid him hip hit hog hop hot how hug hut ice ink ion jam jar jaw jet jog joy key kid kin kit lab lad lag lap law lay led leg let lid lie lip lit log lot low mad man map mat men mix mob mop mud mug nap net new nod nor not now nut oak oar odd off oil old one orb ore our out owl own pad pan pat paw pay pea pen pet pie pig pin pit pop pot put rag ram ran rap rat raw red rib rid rig rim rip rod row rub rug run sad sat saw say sea see set she shy sin sip sir sit six ski sky son sow spa spy sum sun tab tag tan tap tar tea ten the tie tin tip toe ton top toy try tub tug two use van vet war was wax way web wet who why win wit wow yak yam yes yet you zip zoo able acid aged also area army away baby back ball band bank base bath bear beat beer bell belt best bird blow blue boat body bond bone book boom born boss both bowl burn busy call calm came camp card care case cash cast cell chat chip city club coal coat code cold come cook cool cope copy core cost crew crop dark data date dawn dead deal dear deep desk dial diet disc does done door down draw drop drug dual duty each earn east easy edge else even ever face fact fail fair fall farm fast fear feed feel feet fell felt file fill film find fine fire fish five flat flow food foot form four free from fuel full fund game gave gear girl give goal goes gold gone good gray grew grow hair half hall hand hang hard harm hate have head hear heat held hell help here hero high hill hire hold hole holy home hope host hour huge hung hunt idea inch into iron item join jump jury keep kept kick kill kind king knee knew know lack lady lake land lane last late lead left life lift like line link list live load loan lock logo long look lord lose loss lost love made mail main make male many mark mass meal mean meat meet menu mile milk mind mine miss mode moon more most move much must name near neck need news next nice nine none nose note okay once only open over pace pack page paid pain pair park part past path peak pick pink pipe plan play plot pool poor port post pull pure push race rain rank rare rate read real rear rely rent rest rice rich ride ring rise risk road rock role roll roof room root rose rule rush safe said sale salt same sand save seat seed seek seem seen self sell send sent ship shop shot show shut side sign site size skin slow snow soft soil sold solo some song soon sort soul spot star stay step stop such sure take tale talk tall team tech tell tend term test text than that them then they thin this thus tile time tiny told tone took tool tour town tree trip true turn type unit upon user vary vast very view vote wait walk wall want warm wash wave ways weak wear week well went were west what when wide wife wild will wind wine wing wire wise wish with wood word wore work yard yeah year your burst party score timer words brain house plant apple grape peach storm smile laugh crazy queen quick'.split(' '));let dictionary=new Set(fallback),dictionaryReady=false,board=[],selected=[],found=[],score=0,remaining=DURATION,timerId=null,dragging=false,soundOn=true,boardSize=Number(localStorage.getItem('wordburst-board-size'))||4,profile=JSON.parse(localStorage.getItem('wordburst-profile')||'null')||{name:'Guest',emoji:'😎',bestScore:0,games:0,totalWords:0,streak:0,longestWord:''};
-function saveProfile(){localStorage.setItem('wordburst-profile',JSON.stringify(profile));renderProfile()}function renderProfile(){$('profileName').textContent=profile.name||'Guest';$('profileEmoji').textContent=profile.emoji||'😎';$('homeBestScore').textContent=profile.bestScore||0;$('homeStreak').textContent=profile.streak||0;$('homeWords').textContent=profile.totalWords||0;$('profileBest').textContent=profile.bestScore||0;$('profileGames').textContent=profile.games||0;$('profileTotalWords').textContent=profile.totalWords||0}function setBoardSize(n){boardSize=n;localStorage.setItem('wordburst-board-size',n);$('size4').classList.toggle('selected',n===4);$('size5').classList.toggle('selected',n===5)}function showScreen(n){Object.values(screens).forEach(s=>s.classList.remove('active'));screens[n].classList.add('active');scrollTo({top:0,behavior:'smooth'})}function shuffle(a){for(let i=a.length-1;i;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}function rollBoard(){let dice=boardSize===5?dice5:dice4;board=shuffle([...dice]).map(d=>d[Math.floor(Math.random()*d.length)]).map(l=>l==='Q'?'QU':l)}function renderBoard(){boardEl.innerHTML='';pathLayer.innerHTML='';boardEl.style.setProperty('--board-size',boardSize);boardEl.classList.toggle('size-5',boardSize===5);board.forEach((letter,i)=>{let b=document.createElement('button');b.type='button';b.className='tile';b.dataset.index=i;b.innerHTML=letter==='QU'?'Q<span class="qsmall">u</span>':letter;b.addEventListener('pointerdown',e=>{e.preventDefault();dragging=true;clearSelection();selectTile(i)});b.addEventListener('pointerenter',()=>dragging&&selectTile(i));b.addEventListener('click',()=>{if(!dragging)selectTile(i)});boardEl.appendChild(b)})}boardEl.addEventListener('pointermove',e=>{if(!dragging)return;let el=document.elementFromPoint(e.clientX,e.clientY)?.closest('.tile');if(el&&boardEl.contains(el))selectTile(+el.dataset.index)});document.addEventListener('pointerup',()=>dragging=false);function isAdjacent(a,b){let ar=Math.floor(a/boardSize),ac=a%boardSize,br=Math.floor(b/boardSize),bc=b%boardSize;return Math.max(Math.abs(ar-br),Math.abs(ac-bc))===1}function selectTile(i){if(remaining<=0)return;if(selected.includes(i)){if(selected.length>1&&selected.at(-2)===i){selected.pop();updateSelection()}return}if(selected.length&&!isAdjacent(selected.at(-1),i))return;selected.push(i);updateSelection();softClick()}function getSelectedWord(){return selected.map(i=>board[i]).join('')}function clearSelection(){selected=[];updateSelection()}function updateSelection(){[...boardEl.children].forEach((e,i)=>e.classList.toggle('selected',selected.includes(i)));currentWordEl.textContent=getSelectedWord()||'Swipe or tap letters';drawPath()}function drawPath(){pathLayer.innerHTML='';if(selected.length<2)return;let wrap=pathLayer.getBoundingClientRect();for(let n=1;n<selected.length;n++){let a=boardEl.children[selected[n-1]].getBoundingClientRect(),b=boardEl.children[selected[n]].getBoundingClientRect(),l=document.createElementNS('http://www.w3.org/2000/svg','line');l.setAttribute('x1',a.left+a.width/2-wrap.left);l.setAttribute('y1',a.top+a.height/2-wrap.top);l.setAttribute('x2',b.left+b.width/2-wrap.left);l.setAttribute('y2',b.top+b.height/2-wrap.top);pathLayer.appendChild(l)}}function pointsFor(w){let n=w.length;return n<3?0:n<=4?1:n===5?2:n===6?3:n===7?5:11}function norm(w){return w.toLowerCase().replace(/[^a-z]/g,'')}function react(t,g){reactionEl.textContent=t;reactionEl.style.color=g?'var(--good)':'var(--accent2)';clearTimeout(react.t);react.t=setTimeout(()=>reactionEl.textContent='',1200)}function submitWord(){let word=getSelectedWord(),n=norm(word);if(n.length<3){react('Too tiny 😭');clearSelection();return}if(found.some(x=>x.word.toLowerCase()===n)){react('Already got it, genius 😂');clearSelection();return}if(!dictionary.has(n)){react(dictionaryReady?'Nope 😵‍💫':'Dictionary still loading 🤔');clearSelection();return}let pts=pointsFor(n);score+=pts;found.unshift({word:word.toUpperCase(),points:pts});scoreEl.textContent=score;wordCountEl.textContent=found.length;lastPointsEl.textContent=`+${pts}`;foundWordsEl.innerHTML=found.map(x=>`<span class="word-chip">${x.word} +${x.points}</span>`).join('');react(n.length>=8?`💥 ${n.toUpperCase()}?! ABSOLUTE NERD 🤓`:['Nice 😏','Yesss 💥','Brain activated 🧠','Okay smarty pants 🤓','Slayyy ✨','Word goblin strikes 👹'][Math.floor(Math.random()*6)],true);clearSelection()}function formatTime(s){return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}function startGame(){clearInterval(timerId);rollBoard();renderBoard();score=0;found=[];remaining=DURATION;selected=[];scoreEl.textContent=wordCountEl.textContent='0';timerEl.textContent='3:00';timerCard.classList.remove('danger');foundWordsEl.innerHTML='<span class="empty-note">Your words will pop up here ✨</span>';lastPointsEl.textContent=reactionEl.textContent='';showScreen('game');timerId=setInterval(()=>{remaining--;timerEl.textContent=formatTime(remaining);if(remaining<=30)timerCard.classList.add('danger');if(remaining<=0)endGame()},1000)}function endGame(){clearInterval(timerId);timerId=null;let old=profile.bestScore||0;profile.games=(profile.games||0)+1;profile.totalWords=(profile.totalWords||0)+found.length;profile.streak=(profile.streak||0)+1;if(score>old)profile.bestScore=score;let longest=[...found].sort((a,b)=>b.word.length-a.word.length)[0]?.word||'—';if(longest!=='—'&&longest.length>(profile.longestWord||'').length)profile.longestWord=longest;saveProfile();$('finalScore').textContent=score;$('resultWords').textContent=found.length;$('resultLongest').textContent=longest;$('resultBestWord').textContent=[...found].sort((a,b)=>b.points-a.points||b.word.length-a.word.length)[0]?.word||'—';$('personalBest').classList.toggle('hidden',!(score>old));$('resultEmoji').textContent=score>=40?'🤯':score>=20?'😎':score>=8?'🤓':'🫠';$('resultTitle').textContent=score>=40?'WORD MONSTER!':score>=20?'Big Brain Burst!':score>=8?'Nice Burst!':'We Pretend This Never Happened';showScreen('results')}async function loadDictionary(){try{let r=await fetch('https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt');if(!r.ok)throw 0;let words=(await r.text()).split(/\r?\n/).map(x=>x.trim().toLowerCase()).filter(x=>x.length>=3&&x.length<=25&&/^[a-z]+$/.test(x));dictionary=new Set(words);dictionaryReady=true}catch(e){dictionaryReady=false}}function softClick(){if(!soundOn)return;try{let c=new AudioContext(),o=c.createOscillator(),g=c.createGain();o.frequency.value=250;g.gain.value=.015;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.025)}catch(e){}}$('size4').onclick=()=>setBoardSize(4);$('size5').onclick=()=>setBoardSize(5);$('playButton').onclick=startGame;$('playAgainButton').onclick=startGame;$('homeButton').onclick=()=>showScreen('home');$('clearButton').onclick=clearSelection;$('submitButton').onclick=submitWord;$('howButton').onclick=()=>howDialog.showModal();$('profileButton').onclick=()=>{nameInput.value=profile.name;emojiPicker.innerHTML='';emojis.forEach(e=>{let b=document.createElement('button');b.type='button';b.className='emoji-choice'+(e===profile.emoji?' selected':'');b.textContent=e;b.onclick=()=>{profile.emoji=e;[...emojiPicker.children].forEach(x=>x.classList.toggle('selected',x===b))};emojiPicker.appendChild(b)});profileDialog.showModal()};$('saveProfileButton').onclick=()=>{profile.name=nameInput.value.trim()||'Guest';saveProfile()};$('soundButton').onclick=()=>{soundOn=!soundOn;$('soundButton').textContent=soundOn?'🔊':'🔇'};document.addEventListener('keydown',e=>{if(e.key==='Enter'&&screens.game.classList.contains('active'))submitWord();if(e.key==='Escape')clearSelection()});setBoardSize(boardSize);renderProfile();loadDictionary();
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+
+const screens = {
+  home: $('homeScreen'),
+  game: $('gameScreen'),
+  results: $('resultsScreen'),
+};
+
+const boardEl = $('board');
+const pathLayer = $('pathLayer');
+const currentWordEl = $('currentWord');
+const scoreEl = $('score');
+const timerEl = $('timer');
+const timerCard = $('timerCard');
+const wordCountEl = $('wordCount');
+const foundWordsEl = $('foundWords');
+const lastPointsEl = $('lastPoints');
+const reactionEl = $('reaction');
+const profileDialog = $('profileDialog');
+const howDialog = $('howDialog');
+const profileForm = $('profileForm');
+const nameInput = $('nameInput');
+const emojiPicker = $('emojiPicker');
+const soundButton = $('soundButton');
+
+const ROUND_SECONDS = 180;
+const EMOJIS = ['😎','🤓','😂','🤯','😈','👽','🦄','🐸','🧠','💩','👑','🦖','🐔','🥸','🤠','🫠'];
+
+const DICE_4 = [
+  'AAEEGN','ABBJOO','ACHOPS','AFFKPS',
+  'AOOTTW','CIMOTU','DEILRX','DELRVY',
+  'DISTTY','EEGHNW','EEINSU','EHRTVW',
+  'EIOSST','ELRTTY','HIMNQU','HLNNRZ',
+];
+
+const DICE_5 = [
+  'AAAFRS','AAEEEE','AAFIRS','ADENNN','AEEEEM',
+  'AEEGMU','AEGMNN','AFIRSY','BJKQXZ','CCENST',
+  'CEIILT','CEILPT','CEIPST','DDHNOT','DHHLOR',
+  'DHHNOW','DHLNOR','EIIITT','EMOTTT','ENSSSU',
+  'FIPRSY','GORRVW','HIPRRY','NOOTUW','OOOTTU',
+];
+
+// Common family-game words are ready immediately. A larger 10,000-word list is
+// merged quietly after load, but the game never waits for it.
+const LOCAL_WORDS = `
+ace act add ado age ago aid aim air ale all and ant any ape apt arc are ark arm art ash ask ate awe axe
+bad bag ban bar bat bay bed bee beg bet bid big bin bit boa bob bog boo bow box boy bra bud bug bum bun bus but buy bye
+cab can cap car cat cob cod cog cop cot cow coy cry cub cue cup cut
+dab dad dam day den dew did die dig dim din dip dog dot dry dub due dug dye
+ear eat eel egg ego elf elk elm end era eve eye
+fan far fat fax fed fee few fig fin fir fit fix fly foe fog for fox fry fun fur
+gap gas gel gem get gig gin god goo got gum gun gut guy
+gym had ham has hat hay hen her hex hid him hip his hit hoe hog hop hot how hub hug hut
+ice icy ill ink inn ion ire its
+jam jar jaw jay jet jig job jog joy jug
+key kid kin kit lab lad lag lap law lay led leg let lid lie lip lit log lot low mad man map mat men met mix mob mop mud mug nap net new nil nip nod nor not now nun nut oak oar odd off oil old one orb ore our out owl own pad pal pan par pat paw pay pea peg pen pet pie pig pin pit pod pop pot pro pub put rag ram ran rap rat raw ray red rib rid rig rim rip rob rod rot row rub rug run rye sad sag sap sat saw say sea see set she shy sin sip sir sit six ski sky sly sob son sow spa spy sub sum sun tab tag tan tap tar tea ten the thy tic tie tin tip toe ton too top toy try tub tug two use van vat vet vow war was wax way web wed wet who why wig win wit woe won wow yak yam yap yes yet you zap zip zoo
+able acid aged also area army away baby back bake ball band bank base bath beam bean bear beat been beer bell belt bend best bike bill bind bird bite blow blue boat body boil bold bomb bond bone book boom boot boots bore born boss both bowl bulk burn busy cake call calm came camp card care case cash cast cell chat chip city club coal coat code cold come cook cool cope copy core cost crew crop dark data date dawn days dead deal dear deep desk dial diet disc does done door down drag draw drew drop drug dual duck duty each earn east easy edge else even ever face fact fail fair fall farm fast fear feed feel feet fell felt file fill film find fine fire firm fish five flag flat flew flip flow food foot ford form four free from fuel full fund game gave gear girl give goal goes gold golf gone good grab gray grew grow hair half hall hand hang hard harm hate have head hear heat held help here hero high hill hire hold hole holy home hope host hour huge hung hunt idea inch into iron item jack join jump jury keep kept kick kind king knee knew know lack lady lake land lane last late lead leaf left life lift like line link list live load loan lock logo long look lord lose loss lost love made mail main make male many mark mass meal mean meat meet menu mile milk mind mine miss mode moon more most move much must name near neck need news next nice nine none nose note okay once only open over pace pack page paid pain pair park part past path peak pick pink pipe plan play plot pool poor port post pull pure push race rain rank rare rate read real rear rely rent rest rice rich ride ring rise risk road rock role roll roof room root rose rule rush safe said sale salt same sand save seat seed seek seem seen self sell send sent ship shop shot show shut side sign site size skin slow snow soft soil sold solo some song soon sort soul spot star stay step stop such sure swim take tale talk tall team tech tell tend term test text than that them then they thin this thus tile time tiny told tone took tool tour town tree trip true turn type unit upon user vary vast very view vote wait wake walk wall want warm wash wave ways weak wear week well went were west what when wide wife wild will wind wine wing wire wise wish with wood word wore work yard yeah year your
+about above accept across action active actual address affect after again against agent agree allow almost alone along already always amount animal another answer apart appear apple apply around arrive avoid balance basic beach beautiful become before begin behind believe benefit between bottle bottom brain branch bread bridge bright bring brother build building business button camera carry catch cause center chance change charge check child choice choose circle clean clear climb close cloud coast collect color common community company complete condition connect consider continue control corner correct count country course cover create cross current daily dance danger decide degree describe design detail develop difference difficult dinner direction discuss distance divide doctor double doubt dream dress drink early earth effect eight either energy engine enjoy enough enter equal evening every example except exercise expect experience explain family father field fight figure final finger first flower follow force forest forget fresh friend front fruit garden general glass great green ground group guess happen happy health heart heavy history holiday horse hospital house human hundred imagine important improve include increase industry inside interest kitchen language large laugh learn letter listen little local lunch machine major manage market match matter maybe measure member middle might million minute moment money month morning mother mountain movie music nation natural necessary never normal north notice number object ocean offer office often operate opportunity order original outside paint paper parent party people perfect period person phone picture piece place please point police position possible power prepare present pretty price print private problem process produce product project proper protect provide public purpose quality question quiet radio raise range rather ready reason receive recent record reduce region remember report require research resource result return river round school science search season second sense separate serious service shape share sheet shoe short simple sister sleep small smile sound south space speak special speed spend spring square stand start state stone store story street strong study style subject success summer system table teach thank thing think third those thought three through today together total touch track trade train travel under until value visit voice water watch weather wheel where white whole woman women world write wrong yellow young
+burst party score timer words brain house plant grape peach storm smile crazy queen quick wordburst classic big daily family player profile emoji sound swipe slide drag diagonal crisscross zigzag
+`.trim().split(/\s+/);
+
+const dictionary = new Set(
+  LOCAL_WORDS
+    .map((word) => normalizeWord(word))
+    .filter((word) => word.length >= 3 && isFamilySafe(word)),
+);
+
+['due','cue','lid','boot','boots'].forEach((word) => dictionary.add(word));
+
+let boardSize = Number(localStorage.getItem('wordburst-board-size')) === 5 ? 5 : 4;
+let board = [];
+let selected = [];
+let found = [];
+let score = 0;
+let remaining = ROUND_SECONDS;
+let gameRunning = false;
+let timerId = null;
+let roundEndsAt = 0;
+let lastTimerSecond = ROUND_SECONDS;
+let lastCountdownSound = null;
+let reactionTimeout = null;
+let tileCenters = [];
+let gridPitchX = 1;
+let gridPitchY = 1;
+
+const DEFAULT_PROFILE = {
+  name: 'Guest', emoji: '😎', bestScore: 0, games: 0,
+  totalWords: 0, streak: 0, longestWord: '',
+};
+
+let profile = loadProfile();
+let soundOn = localStorage.getItem('wordburst-sound') === 'on';
+let audioContext = null;
+
+const gesture = {
+  active: false,
+  pointerId: null,
+  pointerType: 'touch',
+  lastPoint: null,
+  armed: true,
+  moved: false,
+};
+
+function normalizeWord(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function isFamilySafe(word) {
+  return typeof window.isWordBurstFamilySafe !== 'function' || window.isWordBurstFamilySafe(word);
+}
+
+function loadProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('wordburst-profile') || 'null');
+    return { ...DEFAULT_PROFILE, ...(saved || {}) };
+  } catch {
+    return { ...DEFAULT_PROFILE };
+  }
+}
+
+function saveProfile() {
+  localStorage.setItem('wordburst-profile', JSON.stringify(profile));
+  renderProfile();
+}
+
+function renderProfile() {
+  $('profileName').textContent = profile.name || 'Guest';
+  $('profileEmoji').textContent = profile.emoji || '😎';
+  $('homeBestScore').textContent = profile.bestScore || 0;
+  $('homeStreak').textContent = profile.streak || 0;
+  $('homeWords').textContent = profile.totalWords || 0;
+  $('profileBest').textContent = profile.bestScore || 0;
+  $('profileGames').textContent = profile.games || 0;
+  $('profileTotalWords').textContent = profile.totalWords || 0;
+}
+
+function renderSoundButton() {
+  soundButton.textContent = soundOn ? '🔊' : '🔇';
+  soundButton.setAttribute('aria-label', soundOn ? 'Mute sound' : 'Turn sound on');
+  soundButton.setAttribute('aria-pressed', String(soundOn));
+}
+
+function showScreen(name) {
+  Object.values(screens).forEach((screen) => screen.classList.remove('active'));
+  screens[name].classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function setBoardSize(size) {
+  boardSize = size === 5 ? 5 : 4;
+  localStorage.setItem('wordburst-board-size', String(boardSize));
+  $('size4').classList.toggle('selected', boardSize === 4);
+  $('size5').classList.toggle('selected', boardSize === 5);
+  $('size4').setAttribute('aria-pressed', String(boardSize === 4));
+  $('size5').setAttribute('aria-pressed', String(boardSize === 5));
+}
+
+function shuffle(values) {
+  const copy = [...values];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+}
+
+function rollBoard() {
+  const dice = boardSize === 5 ? DICE_5 : DICE_4;
+  board = shuffle(dice).map((die) => {
+    const letter = die[Math.floor(Math.random() * die.length)];
+    return letter === 'Q' ? 'QU' : letter;
+  });
+}
+
+function renderBoard() {
+  boardEl.replaceChildren();
+  pathLayer.replaceChildren();
+  boardEl.style.setProperty('--board-size', String(boardSize));
+  boardEl.classList.toggle('size-5', boardSize === 5);
+
+  board.forEach((letter, index) => {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'tile';
+    tile.dataset.index = String(index);
+    tile.setAttribute('aria-label', letter === 'QU' ? 'Qu' : letter);
+    if (letter === 'QU') {
+      tile.append('Q');
+      const smallU = document.createElement('span');
+      smallU.className = 'qsmall';
+      smallU.textContent = 'u';
+      tile.appendChild(smallU);
+    } else {
+      tile.textContent = letter;
+    }
+    boardEl.appendChild(tile);
+  });
+
+  requestAnimationFrame(refreshBoardGeometry);
+}
+
+function refreshBoardGeometry() {
+  tileCenters = [...boardEl.children].map((tile) => {
+    const rect = tile.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height };
+  });
+  if (boardSize > 1 && tileCenters.length > boardSize) {
+    gridPitchX = Math.max(1, Math.abs(tileCenters[1].x - tileCenters[0].x));
+    gridPitchY = Math.max(1, Math.abs(tileCenters[boardSize].y - tileCenters[0].y));
+  }
+}
+
+function isAdjacent(first, second) {
+  const firstRow = Math.floor(first / boardSize);
+  const firstColumn = first % boardSize;
+  const secondRow = Math.floor(second / boardSize);
+  const secondColumn = second % boardSize;
+  return Math.max(Math.abs(firstRow - secondRow), Math.abs(firstColumn - secondColumn)) === 1;
+}
+
+function getSelectedWord() {
+  return selected.map((index) => board[index]).join('');
+}
+
+function clearSelection() {
+  selected = [];
+  updateSelection();
+}
+
+function updateSelection() {
+  [...boardEl.children].forEach((tile, index) => tile.classList.toggle('selected', selected.includes(index)));
+  currentWordEl.textContent = getSelectedWord() || 'Swipe letters, then release';
+  drawPath();
+}
+
+function drawPath() {
+  pathLayer.replaceChildren();
+  if (selected.length < 2) return;
+  const layerRect = pathLayer.getBoundingClientRect();
+  for (let index = 1; index < selected.length; index += 1) {
+    const from = tileCenters[selected[index - 1]];
+    const to = tileCenters[selected[index]];
+    if (!from || !to) continue;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', String(from.x - layerRect.left));
+    line.setAttribute('y1', String(from.y - layerRect.top));
+    line.setAttribute('x2', String(to.x - layerRect.left));
+    line.setAttribute('y2', String(to.y - layerRect.top));
+    pathLayer.appendChild(line);
+  }
+}
+
+function pointsFor(word) {
+  const length = word.length;
+  if (length < 3) return 0;
+  if (length <= 4) return 1;
+  if (length === 5) return 2;
+  if (length === 6) return 3;
+  if (length === 7) return 5;
+  return 11;
+}
+
+function showReaction(text, good = false, duration = 1050) {
+  reactionEl.textContent = text;
+  reactionEl.style.color = good ? 'var(--good)' : 'var(--accent2)';
+  clearTimeout(reactionTimeout);
+  reactionTimeout = window.setTimeout(() => { reactionEl.textContent = ''; }, duration);
+}
+
+function validReaction(word) {
+  if (word.length >= 8) return `💥 ${word.toUpperCase()}! Amazing find!`;
+  if (word.length >= 6) return 'Big word! 🔥';
+  const messages = ['Nice! ✨', 'Yesss! 💥', 'Great find! 🌟', 'Got it! 😄', 'WordBurst! 🎉'];
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
+function animateScore() {
+  if (!scoreEl.animate) return;
+  scoreEl.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.22)' }, { transform: 'scale(1)' }], { duration: 220 });
+}
+
+function renderFoundWords() {
+  foundWordsEl.replaceChildren();
+  if (!found.length) {
+    const empty = document.createElement('span');
+    empty.className = 'empty-note';
+    empty.textContent = 'Your words will pop up here ✨';
+    foundWordsEl.appendChild(empty);
+    return;
+  }
+  found.forEach((item) => {
+    const chip = document.createElement('span');
+    chip.className = 'word-chip';
+    chip.textContent = `${item.display} +${item.points}`;
+    foundWordsEl.appendChild(chip);
+  });
+}
+
+function submitSelectedWord() {
+  const display = getSelectedWord().toUpperCase();
+  const word = normalizeWord(display);
+
+  if (word.length < 3) {
+    if (word.length > 1) showReaction('Try 3+ letters 😊');
+    clearSelection();
+    return;
+  }
+  if (!isFamilySafe(word)) {
+    showReaction('That word is filtered for family play');
+    playQuietReject();
+    clearSelection();
+    return;
+  }
+  if (found.some((item) => item.word === word)) {
+    showReaction(`${display} already found ✨`);
+    clearSelection();
+    return;
+  }
+  if (!dictionary.has(word)) {
+    showReaction(`${display} isn’t in this word list`);
+    playQuietReject();
+    clearSelection();
+    return;
+  }
+
+  const points = pointsFor(word);
+  score += points;
+  found.unshift({ word, display, points });
+  scoreEl.textContent = String(score);
+  wordCountEl.textContent = String(found.length);
+  lastPointsEl.textContent = `+${points}`;
+  renderFoundWords();
+  showReaction(validReaction(word), true);
+  playSuccess(word.length);
+  animateScore();
+  clearSelection();
+}
+
+function formatTime(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function updateTimerDisplay(seconds) {
+  timerEl.textContent = formatTime(seconds);
+  timerCard.classList.toggle('danger', seconds <= 30);
+  if (seconds <= 5 && seconds > 0 && seconds !== lastCountdownSound) {
+    lastCountdownSound = seconds;
+    playCountdown(seconds);
+  }
+}
+
+function tickTimer() {
+  if (!gameRunning) return;
+  const millisecondsLeft = roundEndsAt - performance.now();
+  const nextRemaining = Math.max(0, Math.ceil(millisecondsLeft / 1000));
+  if (nextRemaining !== lastTimerSecond) {
+    remaining = nextRemaining;
+    lastTimerSecond = nextRemaining;
+    updateTimerDisplay(nextRemaining);
+  }
+  if (millisecondsLeft <= 0) endGame();
+}
+
+function stopTimer() {
+  if (timerId !== null) window.clearInterval(timerId);
+  timerId = null;
+}
+
+function startGame() {
+  stopTimer();
+  cancelGesture(false);
+  rollBoard();
+  score = 0;
+  found = [];
+  selected = [];
+  remaining = ROUND_SECONDS;
+  lastTimerSecond = ROUND_SECONDS;
+  lastCountdownSound = null;
+  gameRunning = true;
+  scoreEl.textContent = '0';
+  wordCountEl.textContent = '0';
+  lastPointsEl.textContent = '';
+  reactionEl.textContent = '';
+  timerCard.classList.remove('danger');
+  updateTimerDisplay(ROUND_SECONDS);
+  renderFoundWords();
+  showScreen('game');
+  renderBoard();
+  updateSelection();
+  roundEndsAt = performance.now() + ROUND_SECONDS * 1000;
+  timerId = window.setInterval(tickTimer, 100);
+  tickTimer();
+  unlockAudio();
+}
+
+function endGame() {
+  if (!gameRunning) return;
+  gameRunning = false;
+  remaining = 0;
+  stopTimer();
+  cancelGesture(false);
+  clearSelection();
+  updateTimerDisplay(0);
+  playTimeUp();
+
+  const oldBest = profile.bestScore || 0;
+  profile.games = (profile.games || 0) + 1;
+  profile.totalWords = (profile.totalWords || 0) + found.length;
+  profile.streak = score > 0 ? (profile.streak || 0) + 1 : 0;
+  if (score > oldBest) profile.bestScore = score;
+  const longest = [...found].sort((a, b) => b.word.length - a.word.length)[0]?.display || '—';
+  if (longest !== '—' && longest.length > (profile.longestWord || '').length) profile.longestWord = longest;
+  saveProfile();
+
+  const bestWord = [...found].sort((a, b) => b.points - a.points || b.word.length - a.word.length)[0]?.display || '—';
+  $('finalScore').textContent = String(score);
+  $('resultWords').textContent = String(found.length);
+  $('resultLongest').textContent = longest;
+  $('resultBestWord').textContent = bestWord;
+  $('personalBest').classList.toggle('hidden', score <= oldBest);
+
+  if (score >= 40) {
+    $('resultEmoji').textContent = '🤯';
+    $('resultTitle').textContent = 'WORD MONSTER!';
+  } else if (score >= 20) {
+    $('resultEmoji').textContent = '😎';
+    $('resultTitle').textContent = 'Big Brain Burst!';
+  } else if (score >= 8) {
+    $('resultEmoji').textContent = '🤓';
+    $('resultTitle').textContent = 'Nice Burst!';
+  } else {
+    $('resultEmoji').textContent = '🫠';
+    $('resultTitle').textContent = 'We Pretend This Never Happened';
+  }
+  showScreen('results');
+}
+
+// One phone-first gesture engine. It recognizes one of the eight legal directions
+// from the current tile. A center-zone latch prevents an upward move from instantly
+// undoing itself when the player turns diagonally into a criss-cross.
+function processGesturePoint(clientX, clientY) {
+  if (!gesture.active || !gameRunning || !selected.length) return;
+  const lastIndex = selected[selected.length - 1];
+  const center = tileCenters[lastIndex];
+  if (!center) return;
+
+  const normalizedX = (clientX - center.x) / gridPitchX;
+  const normalizedY = (clientY - center.y) / gridPitchY;
+  const absoluteX = Math.abs(normalizedX);
+  const absoluteY = Math.abs(normalizedY);
+  const distance = Math.max(absoluteX, absoluteY);
+
+  if (!gesture.armed) {
+    if (distance <= 0.46) gesture.armed = true;
+    return;
+  }
+  if (distance < 0.48) return;
+
+  let rowStep = 0;
+  let columnStep = 0;
+  const smallerToLarger = Math.min(absoluteX, absoluteY) / Math.max(absoluteX, absoluteY, 0.0001);
+  if (smallerToLarger >= 0.32) {
+    rowStep = normalizedY < 0 ? -1 : 1;
+    columnStep = normalizedX < 0 ? -1 : 1;
+  } else if (absoluteX > absoluteY) {
+    columnStep = normalizedX < 0 ? -1 : 1;
+  } else {
+    rowStep = normalizedY < 0 ? -1 : 1;
+  }
+
+  const lastRow = Math.floor(lastIndex / boardSize);
+  const lastColumn = lastIndex % boardSize;
+  const nextRow = lastRow + rowStep;
+  const nextColumn = lastColumn + columnStep;
+  if (nextRow < 0 || nextRow >= boardSize || nextColumn < 0 || nextColumn >= boardSize) return;
+
+  const nextIndex = nextRow * boardSize + nextColumn;
+  const previousIndex = selected.length > 1 ? selected[selected.length - 2] : -1;
+  if (nextIndex === previousIndex) {
+    if (distance >= 0.70) {
+      selected.pop();
+      gesture.armed = false;
+      updateSelection();
+      gentleHaptic();
+    }
+    return;
+  }
+  if (selected.includes(nextIndex) || !isAdjacent(lastIndex, nextIndex)) return;
+  selected.push(nextIndex);
+  gesture.armed = false;
+  updateSelection();
+  gentleHaptic();
+}
+
+function traceGesture(from, to) {
+  if (!from || !to || !gesture.active) return;
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const stepSize = gesture.pointerType === 'touch' ? 2.5 : 3.5;
+  const steps = Math.max(1, Math.ceil(distance / stepSize));
+  for (let step = 1; step <= steps; step += 1) {
+    const fraction = step / steps;
+    processGesturePoint(from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction);
+  }
+}
+
+function beginGesture(event) {
+  if (!gameRunning || remaining <= 0) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const tile = event.target.closest('.tile');
+  if (!tile || !boardEl.contains(tile)) return;
+  event.preventDefault();
+  refreshBoardGeometry();
+  gesture.active = true;
+  gesture.pointerId = event.pointerId;
+  gesture.pointerType = event.pointerType || 'touch';
+  gesture.lastPoint = { x: event.clientX, y: event.clientY };
+  gesture.armed = true;
+  gesture.moved = false;
+  selected = [Number(tile.dataset.index)];
+  updateSelection();
+  gentleHaptic();
+  try { boardEl.setPointerCapture(event.pointerId); } catch { /* optional */ }
+}
+
+function moveGesture(event) {
+  if (!gesture.active || event.pointerId !== gesture.pointerId) return;
+  event.preventDefault();
+  const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+  const events = samples.length ? samples : [event];
+  events.forEach((sample) => {
+    const point = { x: sample.clientX, y: sample.clientY };
+    if (gesture.lastPoint && Math.hypot(point.x - gesture.lastPoint.x, point.y - gesture.lastPoint.y) > 2) gesture.moved = true;
+    traceGesture(gesture.lastPoint, point);
+    gesture.lastPoint = point;
+  });
+}
+
+function finishGesture(event) {
+  if (!gesture.active) return;
+  if (event && event.pointerId !== undefined && event.pointerId !== gesture.pointerId) return;
+  if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+    traceGesture(gesture.lastPoint, { x: event.clientX, y: event.clientY });
+  }
+  const shouldSubmit = selected.length > 0;
+  const pointerId = gesture.pointerId;
+  gesture.active = false;
+  gesture.pointerId = null;
+  gesture.lastPoint = null;
+  gesture.armed = true;
+  try {
+    if (pointerId !== null && boardEl.hasPointerCapture(pointerId)) boardEl.releasePointerCapture(pointerId);
+  } catch { /* nothing to release */ }
+  if (shouldSubmit) submitSelectedWord();
+}
+
+function cancelGesture(clear = true) {
+  gesture.active = false;
+  gesture.pointerId = null;
+  gesture.lastPoint = null;
+  gesture.armed = true;
+  gesture.moved = false;
+  if (clear && selected.length) clearSelection();
+}
+
+boardEl.addEventListener('pointerdown', beginGesture, { passive: false });
+boardEl.addEventListener('pointermove', moveGesture, { passive: false });
+window.addEventListener('pointerup', finishGesture, { passive: false });
+window.addEventListener('pointercancel', () => cancelGesture(true), { passive: true });
+window.addEventListener('resize', refreshBoardGeometry, { passive: true });
+window.addEventListener('orientationchange', () => window.setTimeout(refreshBoardGeometry, 150), { passive: true });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && gameRunning) tickTimer(); });
+
+// Quiet sound system. Tile movement is silent. Sounds are optional, low-volume,
+// and share one AudioContext instead of creating a harsh oscillator per tile.
+function getAudioContext() {
+  if (!soundOn) return null;
+  try {
+    if (!audioContext) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      audioContext = new AudioContextClass();
+    }
+    if (audioContext.state === 'suspended') audioContext.resume();
+    return audioContext;
+  } catch { return null; }
+}
+
+function unlockAudio() {
+  const context = getAudioContext();
+  if (context?.state === 'suspended') context.resume();
+}
+
+function softTone(frequency, duration = 0.08, volume = 0.009, delay = 0) {
+  const context = getAudioContext();
+  if (!context) return;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const start = context.currentTime + delay;
+  const end = start + duration;
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(frequency, start);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(volume, start + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, end);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(start);
+  oscillator.stop(end + 0.02);
+}
+
+function playSuccess(length) {
+  softTone(length >= 6 ? 587 : 523, 0.07, 0.009);
+  softTone(length >= 6 ? 784 : 659, 0.10, 0.008, 0.055);
+}
+function playQuietReject() { softTone(220, 0.055, 0.0045); }
+function playCountdown(second) { softTone(second <= 3 ? 660 : 520, second <= 3 ? 0.055 : 0.035, 0.006); }
+function playTimeUp() { softTone(440, 0.10, 0.008); softTone(330, 0.12, 0.007, 0.09); }
+function gentleHaptic() {
+  if (gesture.pointerType !== 'touch') return;
+  try { navigator.vibrate?.(4); } catch { /* optional */ }
+}
+
+function openProfile() {
+  nameInput.value = profile.name || 'Guest';
+  emojiPicker.replaceChildren();
+  EMOJIS.forEach((emoji) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `emoji-choice${emoji === profile.emoji ? ' selected' : ''}`;
+    button.textContent = emoji;
+    button.setAttribute('aria-label', `Use ${emoji} avatar`);
+    button.addEventListener('click', () => {
+      profile.emoji = emoji;
+      [...emojiPicker.children].forEach((choice) => choice.classList.toggle('selected', choice === button));
+    });
+    emojiPicker.appendChild(button);
+  });
+  profileDialog.showModal();
+}
+
+$('size4').addEventListener('click', () => setBoardSize(4));
+$('size5').addEventListener('click', () => setBoardSize(5));
+$('playButton').addEventListener('click', startGame);
+$('playAgainButton').addEventListener('click', startGame);
+$('homeButton').addEventListener('click', () => showScreen('home'));
+$('howButton').addEventListener('click', () => howDialog.showModal());
+$('profileButton').addEventListener('click', openProfile);
+profileForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  profile.name = nameInput.value.trim().slice(0, 18) || 'Guest';
+  saveProfile();
+  profileDialog.close();
+});
+soundButton.addEventListener('click', () => {
+  soundOn = !soundOn;
+  localStorage.setItem('wordburst-sound', soundOn ? 'on' : 'off');
+  renderSoundButton();
+  if (soundOn) {
+    unlockAudio();
+    softTone(523, 0.06, 0.007);
+    softTone(659, 0.08, 0.006, 0.05);
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && gameRunning) cancelGesture(true);
+});
+
+async function loadExpandedDictionary() {
+  try {
+    const response = await fetch('https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt', { cache: 'force-cache' });
+    if (!response.ok) return;
+    const text = await response.text();
+    text.split(/\r?\n/).forEach((entry) => {
+      const word = normalizeWord(entry);
+      if (word.length >= 3 && word.length <= 20 && isFamilySafe(word)) dictionary.add(word);
+    });
+  } catch {
+    // The built-in common dictionary remains usable offline.
+  }
+}
+
+setBoardSize(boardSize);
+renderProfile();
+renderSoundButton();
+renderFoundWords();
+loadExpandedDictionary();
