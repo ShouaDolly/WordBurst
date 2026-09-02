@@ -1,0 +1,61 @@
+name: Build bundled dictionary
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/build_dictionary.py"
+      - "family-filter.js"
+      - ".github/workflows/build-dictionary.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-dictionary:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pinned dictionary source
+        run: python -m pip install "textblob==0.19.0"
+
+      - name: Generate local family-safe dictionary
+        run: python scripts/build_dictionary.py
+
+      - name: Bump browser cache version
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          matches = [int(value) for value in re.findall(r'dictionary-additions\.js\?v=(\d+)', text)]
+          next_version = (max(matches) if matches else 7) + 1
+          text = re.sub(
+              r'dictionary-additions\.js(?:\?v=\d+)?',
+              f'dictionary-additions.js?v={next_version}',
+              text,
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit generated dictionary
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dictionary-additions.js index.html
+          if git diff --cached --quiet; then
+            echo "Dictionary is already current."
+            exit 0
+          fi
+          git commit -m "Bundle expanded family-safe dictionary [skip ci]"
+          git push
