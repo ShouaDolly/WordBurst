@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>WordBurst</title>
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <main class="app-shell">
@@ -26,13 +26,23 @@
         <div class="burst-logo">💥</div>
         <h1>WordBurst</h1>
         <p>Connect letters. Find words. Beat your best.</p>
-        <div class="board-choice">
+
+        <div id="boardChoice" class="board-choice">
           <small>BOARD SIZE</small>
           <div>
             <button id="size4" class="size-button selected" type="button" aria-pressed="true">4 × 4<span>CLASSIC</span></button>
             <button id="size5" class="size-button" type="button" aria-pressed="false">5 × 5<span>BIG BURST 💥</span></button>
           </div>
         </div>
+
+        <div id="challengeBanner" class="challenge-banner hidden">
+          <span id="challengeBannerEmoji">🏁</span>
+          <div>
+            <b id="challengeTitle">Friend Challenge</b>
+            <small id="challengeSubtitle">Same puzzle. Best of three.</small>
+          </div>
+        </div>
+
         <button id="playButton" class="primary-button huge" type="button">PLAY SOLO</button>
         <button id="howButton" class="secondary-button" type="button">HOW TO PLAY</button>
       </div>
@@ -45,8 +55,8 @@
 
       <div class="coming-card">
         <span>🎉</span>
-        <div><b>Party Mode</b><small>Same board. Same timer. Family chaos.</small></div>
-        <em>COMING NEXT</em>
+        <div><b>Live Party Rooms</b><small>Shared profiles and a live family leaderboard are coming later.</small></div>
+        <em>NEXT PHASE</em>
       </div>
     </section>
 
@@ -55,6 +65,10 @@
         <div class="hud-card"><small>SCORE</small><strong id="score">0</strong></div>
         <div id="timerCard" class="hud-card timer"><small>TIME</small><strong id="timer">3:00</strong></div>
         <div class="hud-card"><small>WORDS</small><strong id="wordCount">0</strong></div>
+      </div>
+      <div id="challengeHud" class="challenge-hud hidden">
+        <span id="puzzleIdLabel">PUZZLE</span>
+        <span id="attemptLabel">ATTEMPT 1 OF 3</span>
       </div>
       <div id="reaction" class="reaction" aria-live="polite"></div>
       <div id="currentWord" class="current-word" aria-live="polite">Swipe letters, then release</div>
@@ -74,14 +88,47 @@
         <p class="eyebrow">ROUND COMPLETE</p>
         <h1 id="resultTitle">Nice Burst!</h1>
         <div class="final-score"><small>SCORE</small><strong id="finalScore">0</strong></div>
+
         <div class="result-grid">
           <div><b id="resultWords">0</b><small>WORDS</small></div>
-          <div><b id="resultLongest">—</b><small>LONGEST</small></div>
-          <div><b id="resultBestWord">—</b><small>BEST WORD</small></div>
+          <div><b id="resultLongest">—</b><small>YOUR LONGEST</small></div>
+          <div><b id="resultBestWord">—</b><small>TOP WORD</small></div>
         </div>
+
         <div id="personalBest" class="personal-best hidden">🏆 NEW PERSONAL BEST!</div>
-        <button id="playAgainButton" class="primary-button huge" type="button">BURST AGAIN</button>
-        <button id="homeButton" class="secondary-button" type="button">BACK HOME</button>
+
+        <section class="puzzle-solution-card" aria-live="polite">
+          <p class="section-kicker">THIS PUZZLE'S ANSWERS</p>
+          <div class="solution-highlight">
+            <small>LONGEST POSSIBLE WORD</small>
+            <strong id="puzzleLongest">Calculating…</strong>
+          </div>
+          <div class="solution-stats">
+            <div><b id="puzzleWordTotal">—</b><small>POSSIBLE WORDS</small></div>
+            <div><b id="puzzleMaxScore">—</b><small>MAX SCORE</small></div>
+          </div>
+          <p id="puzzleProgress" class="puzzle-progress">WordBurst is checking every legal path on this board.</p>
+        </section>
+
+        <section class="attempt-card">
+          <div class="panel-heading">
+            <h2>Best of 3</h2>
+            <span>🏁</span>
+          </div>
+          <div id="attemptScores" class="attempt-scores"></div>
+          <p id="attemptsLeft" class="attempts-left">2 attempts left · highest score wins</p>
+        </section>
+
+        <div id="friendTargetCard" class="friend-target-card hidden">
+          <span>⚔️</span>
+          <b id="friendTargetText">Friend score to beat</b>
+        </div>
+
+        <button id="replayPuzzleButton" class="primary-button huge" type="button">REPLAY SAME PUZZLE</button>
+        <button id="shareChallengeButton" class="secondary-button huge" type="button">CHALLENGE FRIENDS 📲</button>
+        <p id="shareStatus" class="share-status" aria-live="polite"></p>
+        <button id="newPuzzleButton" class="secondary-button huge" type="button">NEW PUZZLE</button>
+        <button id="homeButton" class="text-button" type="button">BACK HOME</button>
       </div>
     </section>
   </main>
@@ -110,13 +157,14 @@
       <div class="rule-row"><span>↗️</span><div><b>Move in any direction</b><small>Up, down, sideways, diagonally, and sharp criss-cross turns all work.</small></div></div>
       <div class="rule-row"><span>⏱️</span><div><b>3 minute round</b><small>Find as many words as you can before time runs out.</small></div></div>
       <div class="rule-row"><span>🔤</span><div><b>3 letters minimum</b><small>You cannot reuse the same tile within one word.</small></div></div>
-      <div class="rule-row"><span>💥</span><div><b>Long words score big</b><small>3–4: 1 · 5: 2 · 6: 3 · 7: 5 · 8+: 11</small></div></div>
+      <div class="rule-row"><span>💥</span><div><b>Each extra letter scores more</b><small>3 letters: 1 point · 4: 2 · 5: 3 · 6: 4 · and so on.</small></div></div>
+      <div class="rule-row"><span>🏁</span><div><b>Best of three</b><small>Replay the exact puzzle up to three total attempts, then share it so friends can try the same board.</small></div></div>
       <button class="primary-button" value="default">GOT IT</button>
     </form>
   </dialog>
 
-  <script src="family-filter.js?v=6"></script>
-  <script src="app.js?v=6"></script>
-  <script src="dictionary-additions.js?v=6"></script>
+  <script src="family-filter.js?v=7"></script>
+  <script src="app.js?v=7"></script>
+  <script src="dictionary-additions.js?v=7"></script>
 </body>
 </html>
