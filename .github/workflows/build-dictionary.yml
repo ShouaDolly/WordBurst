@@ -24,11 +24,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pinned dictionary source
-        run: python -m pip install "textblob==0.19.0"
+      - name: Install pinned dictionary sources
+        run: python -m pip install "textblob==0.19.0" "wordfreq==3.1.1"
 
       - name: Generate local family-safe dictionary
         run: python scripts/build_dictionary.py
+
+      - name: Verify common-word regressions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('dictionary-additions.js').read_text(encoding='utf-8')
+          for word in ('dire', 'hairs', 'lair', 'lairs', 'stair', 'stairs'):
+              if not any(word in line.split() for line in text.splitlines()):
+                  raise SystemExit(f'Missing required word: {word}')
+          print('Common-word regression checks passed.')
+          PY
 
       - name: Bump browser cache version
         run: |
@@ -38,7 +49,7 @@ jobs:
           path = Path('index.html')
           text = path.read_text(encoding='utf-8')
           matches = [int(value) for value in re.findall(r'dictionary-additions\.js\?v=(\d+)', text)]
-          next_version = (max(matches) if matches else 7) + 1
+          next_version = (max(matches) if matches else 8) + 1
           text = re.sub(
               r'dictionary-additions\.js(?:\?v=\d+)?',
               f'dictionary-additions.js?v={next_version}',
@@ -56,5 +67,5 @@ jobs:
             echo "Dictionary is already current."
             exit 0
           fi
-          git commit -m "Bundle expanded family-safe dictionary [skip ci]"
+          git commit -m "Bundle broader family-safe dictionary [skip ci]"
           git push
