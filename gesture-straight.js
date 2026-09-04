@@ -1,143 +1,134 @@
 'use strict';
 
-// WordBurst gesture override v3.
-// Follow the actual tiles the finger crosses instead of guessing an 8-way
-// direction from the current tile. This makes straight swipes stay straight and
-// still allows deliberate diagonal / criss-cross turns.
+// WordBurst gesture override v4.
+// Every selected letter starts a fresh gesture segment. The next tile is chosen
+// from the direction the finger actually moves from that letter: up, down, left,
+// right, or one of the four diagonals. This avoids both failures seen on phones:
+// a straight move drifting diagonal, and an intentional diagonal being forced
+// sideways first.
 (() => {
   const state = {
     active: false,
     pointerId: null,
     pointerType: 'touch',
     lastPoint: null,
+    origin: null,
+    armed: true,
   };
 
-  function tileInfo(index) {
-    const tile = boardEl.children[index];
-    if (!tile) return null;
-    const rect = tile.getBoundingClientRect();
+  const ENTER_DISTANCE = 0.40;
+  const REARM_ZONE = 0.46;
+  const STRAIGHT_RATIO = 0.58;
+
+  function buzz() {
+    if (state.pointerType !== 'touch') return;
+    try { navigator.vibrate?.(3); } catch { /* optional */ }
+  }
+
+  function currentCenter() {
+    if (!selected.length) return null;
+    return tileCenters[selected[selected.length - 1]] || null;
+  }
+
+  function normalizedFromCenter(x, y) {
+    const center = currentCenter();
+    if (!center) return null;
     return {
-      index,
-      rect,
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-      row: Math.floor(index / boardSize),
-      column: index % boardSize,
+      x: (x - center.x) / Math.max(1, gridPitchX),
+      y: (y - center.y) / Math.max(1, gridPitchY),
     };
   }
 
-  function contains(rect, x, y, pad = 0) {
-    return x >= rect.left - pad
-      && x <= rect.right + pad
-      && y >= rect.top - pad
-      && y <= rect.bottom + pad;
-  }
-
-  function distanceSquared(info, x, y) {
-    const dx = x - info.x;
-    const dy = y - info.y;
-    return dx * dx + dy * dy;
-  }
-
-  function adjacentCandidates(lastIndex) {
-    const lastRow = Math.floor(lastIndex / boardSize);
-    const lastColumn = lastIndex % boardSize;
-    const candidates = [];
-    for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
-      for (let columnOffset = -1; columnOffset <= 1; columnOffset += 1) {
-        if (!rowOffset && !columnOffset) continue;
-        const row = lastRow + rowOffset;
-        const column = lastColumn + columnOffset;
-        if (row < 0 || row >= boardSize || column < 0 || column >= boardSize) continue;
-        const info = tileInfo(row * boardSize + column);
-        if (info) candidates.push(info);
-      }
+  function rearmIfInsideCurrentTile(x, y) {
+    if (state.armed) return true;
+    const relative = normalizedFromCenter(x, y);
+    if (!relative) return false;
+    if (Math.max(Math.abs(relative.x), Math.abs(relative.y)) <= REARM_ZONE) {
+      state.armed = true;
+      state.origin = { x, y };
+      return true;
     }
-    return candidates;
+    return false;
   }
 
-  function chooseCandidate(x, y) {
-    if (!state.active || !selected.length) return null;
+  function directionFromMovement(x, y) {
+    if (!state.origin) return null;
+    const dx = (x - state.origin.x) / Math.max(1, gridPitchX);
+    const dy = (y - state.origin.y) / Math.max(1, gridPitchY);
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    const major = Math.max(ax, ay);
+    if (major < ENTER_DISTANCE) return null;
+
+    const minor = Math.min(ax, ay);
+    const ratio = minor / Math.max(major, 0.0001);
+
+    // Broad straight corridors tolerate normal thumb/finger wobble. A diagonal
+    // still wins easily when the player genuinely moves both axes together.
+    if (ratio < STRAIGHT_RATIO) {
+      if (ax > ay) return { row: 0, column: dx < 0 ? -1 : 1 };
+      return { row: dy < 0 ? -1 : 1, column: 0 };
+    }
+
+    return {
+      row: dy < 0 ? -1 : 1,
+      column: dx < 0 ? -1 : 1,
+    };
+  }
+
+  function nextIndexFor(direction) {
+    if (!direction || !selected.length) return null;
     const lastIndex = selected[selected.length - 1];
-    const previousIndex = selected.length > 1 ? selected[selected.length - 2] : -1;
-    const last = tileInfo(lastIndex);
-    if (!last) return null;
-
-    const candidates = adjacentCandidates(lastIndex);
-
-    // 1) An actual tile under the finger always wins. This is the key behavior:
-    // if the user slides through the O directly beside T, WordBurst chooses that
-    // O rather than trying to infer a diagonal O from the swipe angle.
-    const exact = candidates
-      .filter((candidate) => contains(candidate.rect, x, y))
-      .sort((a, b) => distanceSquared(a, x, y) - distanceSquared(b, x, y));
-    if (exact.length) return exact[0].index;
-
-    // 2) Fill only the small physical gaps between tiles. The padding is modest
-    // enough that adjacent expanded hitboxes may overlap, so straight neighbors
-    // receive a tie-break advantage unless the finger is clearly headed into a
-    // diagonal tile.
-    const pad = Math.max(8, Math.min(last.rect.width, last.rect.height) * 0.20);
-    const nearby = candidates.filter((candidate) => contains(candidate.rect, x, y, pad));
-    if (!nearby.length) return null;
-
-    // Easy backtracking when the finger comes back over the previous tile.
-    const previous = nearby.find((candidate) => candidate.index === previousIndex);
-    if (previous && contains(previous.rect, x, y, pad * 0.72)) return previousIndex;
-
-    const direct = nearby.filter((candidate) => candidate.row === last.row || candidate.column === last.column);
-    const diagonal = nearby.filter((candidate) => candidate.row !== last.row && candidate.column !== last.column);
-
-    if (direct.length) {
-      const bestDirect = direct.sort((a, b) => distanceSquared(a, x, y) - distanceSquared(b, x, y))[0];
-      // Stay in the current row/column while the finger is still inside a broad
-      // straight corridor. A diagonal must leave this corridor or enter its real
-      // tile rectangle before it can win.
-      const horizontal = bestDirect.row === last.row;
-      const perpendicular = horizontal ? Math.abs(y - bestDirect.y) : Math.abs(x - bestDirect.x);
-      const tolerance = (horizontal ? bestDirect.rect.height : bestDirect.rect.width) * 0.58;
-      if (perpendicular <= tolerance) return bestDirect.index;
-    }
-
-    if (diagonal.length) {
-      return diagonal.sort((a, b) => distanceSquared(a, x, y) - distanceSquared(b, x, y))[0].index;
-    }
-
-    return direct.sort((a, b) => distanceSquared(a, x, y) - distanceSquared(b, x, y))[0]?.index ?? null;
+    const row = Math.floor(lastIndex / boardSize) + direction.row;
+    const column = (lastIndex % boardSize) + direction.column;
+    if (row < 0 || row >= boardSize || column < 0 || column >= boardSize) return null;
+    return row * boardSize + column;
   }
 
-  function applyCandidate(index) {
-    if (index === null || index === undefined || !selected.length) return false;
+  function chooseNextAt(x, y) {
+    if (!state.active || !gameRunning || !selected.length) return false;
+    if (!rearmIfInsideCurrentTile(x, y)) return false;
+
+    const direction = directionFromMovement(x, y);
+    if (!direction) return false;
+
+    const nextIndex = nextIndexFor(direction);
+    if (nextIndex === null) return false;
+
     const lastIndex = selected[selected.length - 1];
     const previousIndex = selected.length > 1 ? selected[selected.length - 2] : -1;
 
-    if (index === previousIndex) {
+    if (nextIndex === previousIndex) {
       selected.pop();
+      state.armed = false;
+      state.origin = null;
       updateSelection();
       buzz();
       return true;
     }
-    if (index === lastIndex || selected.includes(index) || !isAdjacent(lastIndex, index)) return false;
 
-    selected.push(index);
+    if (nextIndex === lastIndex || selected.includes(nextIndex) || !isAdjacent(lastIndex, nextIndex)) {
+      return false;
+    }
+
+    selected.push(nextIndex);
+    // Do not immediately chain another tile from the same movement. The finger
+    // must enter the newly selected tile first; then a fresh segment begins.
+    state.armed = false;
+    state.origin = null;
     updateSelection();
     buzz();
     return true;
   }
 
   function processPoint(x, y) {
-    // A single sampled point can advance at most twice. This handles a very fast
-    // swipe without letting one coordinate accidentally chain across the board.
-    for (let hop = 0; hop < 2; hop += 1) {
-      const candidate = chooseCandidate(x, y);
-      if (!applyCandidate(candidate)) break;
-    }
+    chooseNextAt(x, y);
   }
 
   function trace(from, to) {
     if (!from || !to || !state.active) return;
     const distance = Math.hypot(to.x - from.x, to.y - from.y);
-    const stepSize = state.pointerType === 'touch' ? 3 : 4;
+    const stepSize = state.pointerType === 'touch' ? 2.5 : 3.5;
     const steps = Math.max(1, Math.ceil(distance / stepSize));
     for (let step = 1; step <= steps; step += 1) {
       const fraction = step / steps;
@@ -146,11 +137,6 @@
         from.y + (to.y - from.y) * fraction,
       );
     }
-  }
-
-  function buzz() {
-    if (state.pointerType !== 'touch') return;
-    try { navigator.vibrate?.(3); } catch { /* optional */ }
   }
 
   function begin(event) {
@@ -167,6 +153,9 @@
     state.pointerId = event.pointerId;
     state.pointerType = event.pointerType || 'touch';
     state.lastPoint = { x: event.clientX, y: event.clientY };
+    state.origin = { x: event.clientX, y: event.clientY };
+    state.armed = true;
+
     selected = [Number(tile.dataset.index)];
     updateSelection();
     buzz();
@@ -206,6 +195,8 @@
     state.active = false;
     state.pointerId = null;
     state.lastPoint = null;
+    state.origin = null;
+    state.armed = true;
 
     try {
       if (pointerId !== null && boardEl.hasPointerCapture(pointerId)) boardEl.releasePointerCapture(pointerId);
@@ -220,11 +211,13 @@
     state.active = false;
     state.pointerId = null;
     state.lastPoint = null;
+    state.origin = null;
+    state.armed = true;
     if (selected.length) clearSelection();
   }
 
-  // Capture-phase handlers disable the older bubble-phase gesture engine so only
-  // this tracer makes selection decisions.
+  // Capture-phase handlers run before the older engine in app.js and prevent it
+  // from making a second, conflicting selection decision.
   boardEl.addEventListener('pointerdown', begin, { capture: true, passive: false });
   boardEl.addEventListener('pointermove', move, { capture: true, passive: false });
   window.addEventListener('pointerup', finish, { capture: true, passive: false });
